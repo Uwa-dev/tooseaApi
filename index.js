@@ -27,6 +27,15 @@ const port = 2222;
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+app.use(
+  "/api/payments/webhook",
+  express.json({
+    verify: (req, res, buf) => {
+      req.rawBody = buf;
+    },
+  })
+);
+
 // app.use(cookieParser());
 
 app.use("/api/users", userRouter);

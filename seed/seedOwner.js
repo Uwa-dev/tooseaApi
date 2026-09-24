@@ -28,8 +28,8 @@ const seedOwner = async () => {
     );
 
     const owner = await User.create({
-      fullName: "System Owner",
-      email: "owner@system.com",
+      fullName: "Tobi Agene",
+      email: "tooseagarden@gmail.com",
       password: hashedPassword,
       role: "OWNER",
       staffCode: "OWN001"
