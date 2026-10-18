@@ -233,15 +233,17 @@ export const getReceptionistDashboard = async (req, res) => {
   try {
     const userId = req.user.id;
 
+    // =========================================
     // TODAY
+    // =========================================
+
     const start = new Date();
     start.setHours(0, 0, 0, 0);
 
     const end = new Date();
     end.setHours(23, 59, 59, 999);
 
-    // UPCOMING CHECK-OUTS
-    // Today + the next 3 days
+    // Today + next 3 days
     const upcomingDate = new Date(start);
     upcomingDate.setDate(start.getDate() + 3);
     upcomingDate.setHours(23, 59, 59, 999);
@@ -255,10 +257,16 @@ export const getReceptionistDashboard = async (req, res) => {
       todayDepartures,
       occupiedApartments,
       availableApartments,
-      upcomingCheckouts
+      upcomingCheckouts,
+      upcomingCheckins,
+      occupiedApartmentDetails
     ] = await Promise.all([
 
-      // WALK-IN BOOKINGS CREATED BY THIS RECEPTIONIST TODAY
+      // =========================================
+      // 1. WALK-IN BOOKINGS CREATED BY THIS
+      //    RECEPTIONIST TODAY
+      // =========================================
+
       Booking.countDocuments({
         bookingSource: "WALK_IN",
         createdBy: userId,
@@ -268,7 +276,10 @@ export const getReceptionistDashboard = async (req, res) => {
         }
       }),
 
-      // GUESTS CHECKED IN TODAY
+      // =========================================
+      // 2. GUESTS CHECKED IN TODAY
+      // =========================================
+
       Booking.countDocuments({
         bookingStatus: "CHECKED_IN",
         checkedInAt: {
@@ -277,7 +288,11 @@ export const getReceptionistDashboard = async (req, res) => {
         }
       }),
 
-      // TODAY'S CONFIRMED BOOKINGS THAT HAVE NOT CHECKED IN
+      // =========================================
+      // 3. TODAY'S CONFIRMED BOOKINGS THAT
+      //    HAVE NOT CHECKED IN YET
+      // =========================================
+
       Booking.countDocuments({
         bookingStatus: "CONFIRMED",
         checkInDate: {
@@ -286,7 +301,10 @@ export const getReceptionistDashboard = async (req, res) => {
         }
       }),
 
-      // GUESTS CHECKED OUT TODAY
+      // =========================================
+      // 4. GUESTS CHECKED OUT TODAY
+      // =========================================
+
       Booking.countDocuments({
         bookingStatus: "CHECKED_OUT",
         checkedOutAt: {
@@ -295,7 +313,10 @@ export const getReceptionistDashboard = async (req, res) => {
         }
       }),
 
-      // TODAY'S ARRIVALS
+      // =========================================
+      // 5. TODAY'S ARRIVALS
+      // =========================================
+
       Booking.countDocuments({
         checkInDate: {
           $gte: start,
@@ -306,7 +327,10 @@ export const getReceptionistDashboard = async (req, res) => {
         }
       }),
 
-      // TODAY'S DEPARTURES
+      // =========================================
+      // 6. TODAY'S DEPARTURES
+      // =========================================
+
       Booking.countDocuments({
         checkOutDate: {
           $gte: start,
@@ -315,50 +339,105 @@ export const getReceptionistDashboard = async (req, res) => {
         bookingStatus: "CHECKED_IN"
       }),
 
-      // CURRENTLY OCCUPIED
+      // =========================================
+      // 7. CURRENTLY OCCUPIED APARTMENTS
+      // =========================================
+
       Apartment.countDocuments({
         isActive: true,
         status: "OCCUPIED"
       }),
 
-      // CURRENTLY AVAILABLE
+      // =========================================
+      // 8. CURRENTLY AVAILABLE APARTMENTS
+      // =========================================
+
       Apartment.countDocuments({
         isActive: true,
         status: "AVAILABLE"
       }),
 
-      // UPCOMING CHECK-OUTS
+      // =========================================
+      // 9. UPCOMING CHECK-OUTS
+      //
+      // ONLY guests who are currently CHECKED_IN
+      // =========================================
+
       Booking.find({
+        bookingStatus: "CHECKED_IN",
         checkOutDate: {
           $gte: start,
           $lte: upcomingDate
-        },
-        bookingStatus: {
-          $in: ["CONFIRMED", "CHECKED_IN"]
         }
       })
         .populate("apartment", "name apartmentCode")
         .sort({ checkOutDate: 1 })
-        .limit(10)
+        .limit(10),
+
+      // =========================================
+      // 10. UPCOMING CHECK-INS
+      //
+      // ONLINE bookings that are CONFIRMED
+      // and expected to arrive today or
+      // within the next 3 days.
+      // =========================================
+
+      Booking.find({
+        bookingSource: "ONLINE",
+        bookingStatus: "CONFIRMED",
+        checkInDate: {
+          $gte: start,
+          $lte: upcomingDate
+        }
+      })
+        .populate("apartment", "name apartmentCode")
+        .sort({ checkInDate: 1 })
+        .limit(10),
+
+      // =========================================
+      // 11. ALL CURRENTLY OCCUPIED APARTMENTS
+      //
+      // Every CHECKED_IN booking represents
+      // a guest currently occupying an apartment.
+      // =========================================
+
+      Booking.find({
+        bookingStatus: "CHECKED_IN"
+      })
+        .populate("apartment", "name apartmentCode")
+        .sort({ checkOutDate: 1 })
 
     ]);
 
+    // =========================================
+    // RESPONSE
+    // =========================================
+
     return res.status(200).json({
       success: true,
+
       data: {
+        // Summary
         walkInBookingsToday,
         checkInsToday,
         pendingCheckIns,
         checkOutsToday,
         todayArrivals,
         todayDepartures,
+
+        // Apartment counts
         occupiedApartments,
         availableApartments,
-        upcomingCheckouts
+
+        // Dashboard sections
+        upcomingCheckouts,
+        upcomingCheckins,
+        occupiedApartmentDetails
       }
     });
 
   } catch (error) {
+
     console.error(
       "Receptionist dashboard error:",
       error

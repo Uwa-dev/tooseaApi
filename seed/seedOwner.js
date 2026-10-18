@@ -47,28 +47,20 @@ const seedOwner = async () => {
 
 seedOwner();
 
-
-
-// Name: Donald Muc
-// Email: donald@gmail.com
+// Name: James Hudson
+// Email: james@gmail.com
 // Role: RECEPTIONIST
-// Staff Code: REC001
-// Password: dUT5utpJFA
+// Staff Code: REC005
+// Password: 6egR3evepF
 
-
-//Name: Miracle Imade
-//Email: miracle@gmail.com
-// Role: Manager
-//Password: dIxdG2L4q9
-
-// Name: Chidi Dalu
-// Email: chidi@gmail.com
-//Role: RECEPTIONIST
-// Staff Code: REC003
-//Password: FI6ai4pgkr
-
-// Name: Somtochukwu Dalu
-// Email: somto@gmail.com
+// Name: Dara Mcdonald
+// Email: dara@gmail.com
 // Role: MANAGER
-// Staff Code: MGR003
-// Password: 7br8Gg$Cqo
+// Staff Code: MGR005
+// Password: 0oKRqgV@VU
+
+// Name: Tonia Ibrahim
+// Email: tonia@gmail.com
+// Role: RECEPTIONIST
+// Staff Code: REC007
+// Password: XMQw21RGk@

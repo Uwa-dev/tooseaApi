@@ -2,6 +2,7 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import User from "../models/userModel.js";
 import { generateStaffCode } from "../utils/generateStaffCode.js";
+import { sendStaffWelcomeEmail } from "../services/emailService.js"
 
 const generatePassword = () => {
   const chars =
@@ -116,6 +117,15 @@ export const createUser = async (req, res) => {
 
       // Record who created the staff
       createdBy: creator._id
+    });
+
+    await sendStaffWelcomeEmail({
+      email: user.email,
+      fullName: user.fullName,
+      role: user.role,
+      staffCode: user.staffCode,
+      password: plainPassword,
+      approvalStatus: user.approvalStatus,
     });
 
     // ----------------------------------

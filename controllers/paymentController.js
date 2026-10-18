@@ -2,6 +2,7 @@ import axios from "axios";
 import crypto from "crypto";
 import Booking from "../models/bookingModel.js";
 import Payment from "../models/paymentModel.js";
+import { sendBookingConfirmationEmail } from "../services/emailService.js"
 
 /*
 |--------------------------------------------------------------------------
@@ -168,6 +169,19 @@ export const verifyPayment = async (req, res) => {
       booking.bookingStatus = "CONFIRMED";
 
       await booking.save();
+
+      await sendBookingConfirmationEmail({
+        email: booking.customer.email,
+        fullName: booking.customer.fullName,
+        bookingReference: booking.bookingReference,
+        apartmentName: booking.apartmentName,
+        apartmentCode: booking.apartmentCode,
+        checkInDate: booking.checkInDate,
+        checkOutDate: booking.checkOutDate,
+        totalPrice: booking.totalPrice,
+        paymentStatus: booking.paymentStatus,
+        bookingStatus: booking.bookingStatus,
+      });
 
       return res.status(200).json({
         success: true,
@@ -386,9 +400,19 @@ export const paystackWebhook = async (req, res) => {
 
     await booking.save();
 
-    console.log(
-      `Paystack payment confirmed: ${reference}`
-    );
+    await sendBookingConfirmationEmail({
+      email: booking.customer.email,
+      fullName: booking.customer.fullName,
+      bookingReference: booking.bookingReference,
+      apartmentName: booking.apartmentName,
+      apartmentCode: booking.apartmentCode,
+      checkInDate: booking.checkInDate,
+      checkOutDate: booking.checkOutDate,
+      totalPrice: booking.totalPrice,
+      paymentStatus: booking.paymentStatus,
+      bookingStatus: booking.bookingStatus,
+    });
+ 
 
     return res.status(200).json({
       success: true,
