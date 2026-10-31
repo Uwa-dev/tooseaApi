@@ -3,6 +3,7 @@ import jwt from "jsonwebtoken";
 import User from "../models/userModel.js";
 import { generateStaffCode } from "../utils/generateStaffCode.js";
 import { sendStaffWelcomeEmail } from "../services/emailService.js"
+import "dotenv/config";
 
 const generatePassword = () => {
   const chars =

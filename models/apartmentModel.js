@@ -17,6 +17,29 @@ const imageSchema = new mongoose.Schema(
   }
 );
 
+const pendingUpdateSchema = new mongoose.Schema(
+  {
+    changes: {
+      type: mongoose.Schema.Types.Mixed,
+      required: true
+    },
+
+    submittedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true
+    },
+
+    submittedAt: {
+      type: Date,
+      default: Date.now
+    }
+  },
+  {
+    _id: false
+  }
+);
+
 const apartmentSchema = new mongoose.Schema(
   {
     apartmentCode: {
@@ -104,10 +127,24 @@ const apartmentSchema = new mongoose.Schema(
       default: null
     },
 
+    pendingUpdate: {
+      type: pendingUpdateSchema,
+      default: null
+    },
+
     isActive: {
       type: Boolean,
       default: true
-    }
+    },
+    pendingDeletion: {
+      requestedBy: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
+      },
+      requestedAt: {
+        type: Date,
+      },
+    },
   },
   {
     timestamps: true
@@ -117,3 +154,4 @@ const apartmentSchema = new mongoose.Schema(
 const Apartment = mongoose.model("Apartment", apartmentSchema);
 
 export default Apartment;
+

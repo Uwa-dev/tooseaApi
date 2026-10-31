@@ -1,14 +1,23 @@
 import nodemailer from "nodemailer";
+import "dotenv/config";
+
+const zohoEmail = process.env.ZOHO_EMAIL?.trim();
+const zohoPassword = process.env.ZOHO_APP_PASSWORD?.trim();
+
+if (!zohoEmail || !zohoPassword) {
+  throw new Error(
+    "Zoho SMTP credentials are missing in emailService.js"
+  );
+}
 
 const transporter = nodemailer.createTransport({
   host: "smtp.zoho.com",
   port: 465,
   secure: true,
-
   auth: {
-    user: process.env.ZOHO_EMAIL,
-    pass: process.env.ZOHO_APP_PASSWORD
-  }
+    user: zohoEmail,
+    pass: zohoPassword,
+  },
 });
 
 export const sendStaffWelcomeEmail = async ({

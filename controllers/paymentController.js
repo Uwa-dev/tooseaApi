@@ -78,7 +78,6 @@ export const initializePayment = async (req, res) => {
       reference,
     });
   } catch (error) {
-    console.log(error.response?.data || error);
 
     return res.status(500).json({
       success: false,
@@ -120,9 +119,8 @@ export const verifyPayment = async (req, res) => {
       });
     }
 
-    const booking = await Booking.findById(
-      payment.booking._id
-    );
+    const booking = await Booking.findById(payment.booking._id)
+  .populate("apartment", "name apartmentCode");
 
     if (!booking) {
       return res.status(404).json({
@@ -173,9 +171,9 @@ export const verifyPayment = async (req, res) => {
       await sendBookingConfirmationEmail({
         email: booking.customer.email,
         fullName: booking.customer.fullName,
-        bookingReference: booking.bookingReference,
-        apartmentName: booking.apartmentName,
-        apartmentCode: booking.apartmentCode,
+        bookingReference: payment.transactionReference,
+        apartmentName: booking.apartment?.name,
+        apartmentCode: booking.apartment?.apartmentCode,
         checkInDate: booking.checkInDate,
         checkOutDate: booking.checkOutDate,
         totalPrice: booking.totalPrice,
@@ -248,7 +246,6 @@ export const verifyPayment = async (req, res) => {
         "Payment status is still being determined.",
     });
   } catch (error) {
-    console.log(error.response?.data || error);
 
     return res.status(500).json({
       success: false,
@@ -348,9 +345,8 @@ export const paystackWebhook = async (req, res) => {
     |--------------------------------------------------------------------------
     */
 
-    const booking = await Booking.findById(
-      payment.booking
-    );
+    const booking = await Booking.findById(payment.booking)
+      .populate("apartment", "name apartmentCode");
 
     if (!booking) {
       console.log(

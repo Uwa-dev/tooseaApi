@@ -1712,3 +1712,68 @@ export const getAvailableApartments =
       });
     }
   };
+
+
+export const getPendingBookings = async (req, res) => {
+  try {
+    const bookings = await Booking.find({
+      bookingStatus: "PENDING",
+    })
+      .populate(
+        "apartment",
+        "name apartmentName apartmentCode apartmentType pricePerNight images"
+      )
+      .sort({ createdAt: -1 })
+      .lean();
+
+    return res.status(200).json({
+      success: true,
+      count: bookings.length,
+      bookings,
+    });
+  } catch (error) {
+    console.error("Get pending bookings error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch pending bookings.",
+    });
+  }
+};
+
+
+export const cancelPendingBooking = async (req, res) => {
+  try {
+    const booking = await Booking.findById(req.params.id);
+
+    if (!booking) {
+      return res.status(404).json({
+        success: false,
+        message: "Booking not found.",
+      });
+    }
+
+    if (booking.bookingStatus !== "PENDING") {
+      return res.status(400).json({
+        success: false,
+        message: "Only pending bookings can be cancelled using this action.",
+      });
+    }
+
+    booking.bookingStatus = "CANCELLED";
+    await booking.save();
+
+    return res.status(200).json({
+      success: true,
+      message: "Pending booking cancelled successfully.",
+      booking,
+    });
+  } catch (error) {
+    console.error("Cancel pending booking error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to cancel booking.",
+    });
+  }
+};

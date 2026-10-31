@@ -18,7 +18,6 @@ const seedOwner = async () => {
     });
 
     if (existingOwner) {
-      console.log("Owner already exists");
       process.exit();
     }
 
@@ -35,12 +34,9 @@ const seedOwner = async () => {
       staffCode: "OWN001"
     });
 
-    console.log("Owner created:", owner);
-
     process.exit();
 
   } catch (error) {
-    console.log(error.message);
     process.exit(1);
   }
 };

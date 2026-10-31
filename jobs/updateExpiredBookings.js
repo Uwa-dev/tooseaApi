@@ -16,10 +16,6 @@ cron.schedule("0 6 * * *", async () => {
         },
       }
     );
-
-    console.log(
-      `${result.modifiedCount} booking(s) marked as EXPIRED`
-    );
   } catch (error) {
     console.log(error);
   }

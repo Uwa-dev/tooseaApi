@@ -15,7 +15,6 @@ const transporter = nodemailer.createTransport({
 async function testEmail() {
   try {
     await transporter.verify();
-    console.log("Zoho SMTP connection successful!");
 
     const info = await transporter.sendMail({
       from: `"ToOseA Garden" <${process.env.ZOHO_EMAIL}>`,
@@ -31,7 +30,6 @@ async function testEmail() {
       `,
     });
 
-    console.log("Test email sent successfully:", info.messageId);
   } catch (error) {
     console.error("Email test failed:", error.message);
   }

@@ -264,86 +264,477 @@ export const getApartmentById = async (req, res) => {
 
 export const updateApartment = async (req, res) => {
   try {
-    const apartment =
-      await Apartment.findByIdAndUpdate(
-        req.params.id,
-        req.body,
-        {
-          new: true,
-          runValidators: true
-        }
-      );
+    const { role, _id: userId } = req.user;
+    const { id } = req.params;
+
+    // Only OWNER and MANAGER can update apartments
+    if (!["OWNER", "MANAGER"].includes(role)) {
+      return res.status(403).json({
+        success: false,
+        message: "You are not authorized to update apartments."
+      });
+    }
+
+    const apartment = await Apartment.findById(id);
 
     if (!apartment) {
       return res.status(404).json({
         success: false,
-        message:
-          "Apartment not found"
+        message: "Apartment not found."
       });
     }
 
+    // Only allow these fields to be edited through this endpoint.
+    // Managers cannot directly change approval, activity or status fields.
+    const allowedFields = [
+      "name",
+      "description",
+      "apartmentType",
+      "pricePerNight",
+      "capacity",
+      "amenities"
+    ];
+
+    const changes = {};
+
+    for (const field of allowedFields) {
+      if (Object.prototype.hasOwnProperty.call(req.body, field)) {
+        changes[field] = req.body[field];
+      }
+    }
+
+    if (Object.keys(changes).length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "No valid apartment changes were provided."
+      });
+    }
+
+    // Validate and normalize submitted values
+    if (changes.name !== undefined) {
+      if (
+        typeof changes.name !== "string" ||
+        !changes.name.trim()
+      ) {
+        return res.status(400).json({
+          success: false,
+          message: "Apartment name is required."
+        });
+      }
+
+      changes.name = changes.name.trim();
+
+      const existingApartment = await Apartment.findOne({
+        name: changes.name,
+        _id: { $ne: apartment._id }
+      });
+
+      if (existingApartment) {
+        return res.status(409).json({
+          success: false,
+          message: "Another apartment already uses this name."
+        });
+      }
+    }
+
+    if (changes.description !== undefined) {
+      if (
+        typeof changes.description !== "string" ||
+        !changes.description.trim()
+      ) {
+        return res.status(400).json({
+          success: false,
+          message: "Description is required."
+        });
+      }
+
+      changes.description = changes.description.trim();
+    }
+
+    if (changes.pricePerNight !== undefined) {
+      const price = Number(changes.pricePerNight);
+
+      if (!Number.isFinite(price) || price < 1) {
+        return res.status(400).json({
+          success: false,
+          message: "Price per night must be greater than zero."
+        });
+      }
+
+      changes.pricePerNight = price;
+    }
+
+    if (changes.capacity !== undefined) {
+      const capacity = Number(changes.capacity);
+
+      if (!Number.isInteger(capacity) || capacity < 1) {
+        return res.status(400).json({
+          success: false,
+          message: "Capacity must be a positive whole number."
+        });
+      }
+
+      changes.capacity = capacity;
+    }
+
+    if (changes.apartmentType !== undefined) {
+      const validTypes = [
+        "STANDARD",
+        "DELUXE",
+        "EXECUTIVE",
+        "SUITE",
+        "PRESIDENTIAL"
+      ];
+
+      if (!validTypes.includes(changes.apartmentType)) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid apartment type."
+        });
+      }
+    }
+
+    if (changes.amenities !== undefined) {
+      if (
+        !Array.isArray(changes.amenities) ||
+        !changes.amenities.every(
+          item => typeof item === "string"
+        )
+      ) {
+        return res.status(400).json({
+          success: false,
+          message: "Amenities must be an array of strings."
+        });
+      }
+
+      changes.amenities = changes.amenities.map(
+        item => item.trim()
+      );
+    }
+
+    // MANAGER: save proposed changes for OWNER approval
+    if (role === "MANAGER") {
+      if (apartment.pendingUpdate) {
+        return res.status(409).json({
+          success: false,
+          message:
+            "This apartment already has an update awaiting owner approval."
+        });
+      }
+
+      apartment.pendingUpdate = {
+        changes,
+        submittedBy: userId,
+        submittedAt: new Date()
+      };
+
+      await apartment.save();
+
+      return res.status(200).json({
+        success: true,
+        message:
+          "Apartment update submitted successfully and is awaiting owner approval.",
+        apartment
+      });
+    }
+
+    // OWNER: apply changes immediately
+    for (const [field, value] of Object.entries(changes)) {
+      apartment.set(field, value);
+    }
+
+    await apartment.save();
+
     return res.status(200).json({
       success: true,
+      message: "Apartment updated successfully.",
       apartment
     });
+
   } catch (error) {
+    console.error("Update apartment error:", error);
+
+    if (error.name === "ValidationError") {
+      return res.status(400).json({
+        success: false,
+        message: error.message
+      });
+    }
+
+    if (error.code === 11000) {
+      return res.status(409).json({
+        success: false,
+        message: "An apartment with this name or code already exists."
+      });
+    }
+
     return res.status(500).json({
       success: false,
-      message: error.message
+      message: "Failed to update apartment."
     });
   }
 };
 
-export const deleteApartment = async (req, res) => {
+export const approveApartmentUpdate = async (req, res) => {
   try {
-    const apartment = await Apartment.findById(req.params.id);
+    if (req.user.role !== "OWNER") {
+      return res.status(403).json({
+        success: false,
+        message: "Only the owner can approve apartment updates."
+      });
+    }
+
+    const { id } = req.params;
+
+    const apartment = await Apartment.findById(id);
 
     if (!apartment) {
       return res.status(404).json({
         success: false,
-        message: "Apartment not found",
+        message: "Apartment not found."
       });
     }
 
-    // Delete all images from Cloudinary
-    if (apartment.images && apartment.images.length > 0) {
+    if (!apartment.pendingUpdate) {
+      return res.status(400).json({
+        success: false,
+        message: "No pending update found for this apartment."
+      });
+    }
+
+    const { changes } = apartment.pendingUpdate;
+
+    // Check that the proposed name is still available
+    if (changes.name !== undefined) {
+      const existingApartment = await Apartment.findOne({
+        name: changes.name,
+        _id: { $ne: apartment._id }
+      });
+
+      if (existingApartment) {
+        return res.status(409).json({
+          success: false,
+          message:
+            "The proposed apartment name is already in use. The pending update has not been applied."
+        });
+      }
+    }
+
+    // Apply the manager's approved changes
+    for (const [field, value] of Object.entries(changes)) {
+      apartment.set(field, value);
+    }
+
+    // Clear the pending request
+    apartment.pendingUpdate = null;
+
+    await apartment.save();
+
+    return res.status(200).json({
+      success: true,
+      message: "Apartment update approved successfully.",
+      apartment
+    });
+
+  } catch (error) {
+    console.error("Approve apartment update error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to approve apartment update."
+    });
+  }
+};
+
+export const rejectApartmentUpdate = async (req, res) => {
+  try {
+    if (req.user.role !== "OWNER") {
+      return res.status(403).json({
+        success: false,
+        message: "Only the owner can reject apartment updates."
+      });
+    }
+
+    const { id } = req.params;
+
+    const apartment = await Apartment.findById(id);
+
+    if (!apartment) {
+      return res.status(404).json({
+        success: false,
+        message: "Apartment not found."
+      });
+    }
+
+    if (!apartment.pendingUpdate) {
+      return res.status(400).json({
+        success: false,
+        message: "No pending update found for this apartment."
+      });
+    }
+
+    // Discard the proposed changes without changing live details
+    apartment.pendingUpdate = null;
+
+    await apartment.save();
+
+    return res.status(200).json({
+      success: true,
+      message: "Apartment update rejected successfully.",
+      apartment
+    });
+
+  } catch (error) {
+    console.error("Reject apartment update error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to reject apartment update."
+    });
+  }
+};
+
+export const getPendingApartmentUpdates = async (req, res) => {
+  try {
+    if (req.user.role !== "OWNER") {
+      return res.status(403).json({
+        success: false,
+        message: "Only the owner can view pending apartment updates."
+      });
+    }
+
+    const apartments = await Apartment.find({
+      "pendingUpdate.changes": { $exists: true }
+    })
+      .populate(
+        "pendingUpdate.submittedBy",
+        "fullName email role staffCode"
+      )
+      .sort({ "pendingUpdate.submittedAt": -1 });
+
+    return res.status(200).json({
+      success: true,
+      count: apartments.length,
+      apartments
+    });
+
+  } catch (error) {
+    console.error("Get pending apartment updates error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch pending apartment updates."
+    });
+  }
+};
+
+
+
+export const deleteApartment = async (req, res) => {
+  try {
+    const { role, _id: userId } = req.user;
+    const { id } = req.params;
+
+    if (!["OWNER", "MANAGER"].includes(role)) {
+      return res.status(403).json({
+        success: false,
+        message: "You are not authorized to delete apartments.",
+      });
+    }
+
+    const apartment = await Apartment.findById(id);
+
+    if (!apartment) {
+      return res.status(404).json({
+        success: false,
+        message: "Apartment not found.",
+      });
+    }
+
+    // MANAGER: submit deletion request for OWNER approval.
+    if (role === "MANAGER") {
+      if (apartment.pendingDeletion?.requestedAt) {
+        return res.status(409).json({
+          success: false,
+          message:
+            "This apartment already has a pending deletion request.",
+        });
+      }
+
+      apartment.pendingDeletion = {
+        requestedBy: userId,
+        requestedAt: new Date(),
+      };
+
+      await apartment.save();
+
+      return res.status(200).json({
+        success: true,
+        message:
+          "Deletion request submitted successfully and is awaiting owner approval.",
+        apartment,
+      });
+    }
+
+    // OWNER: prevent deletion only when there are upcoming
+    // or ongoing bookings.
+    const today = new Date();
+    today.setUTCHours(0, 0, 0, 0);
+
+    const activeBookings = await Booking.find({
+      apartment: apartment._id,
+      bookingStatus: {
+        $in: ["PENDING", "CONFIRMED", "CHECKED_IN"],
+      },
+      checkOutDate: {
+        $gt: today,
+      },
+    }).select(
+      "_id bookingReference customer bookingStatus paymentStatus checkInDate checkOutDate createdAt"
+    );
+
+    if (activeBookings.length > 0) {
+      return res.status(409).json({
+        success: false,
+        message:
+          "This apartment has upcoming or ongoing bookings and cannot be deleted.",
+        activeBookings,
+      });
+    }
+
+    // Delete images from Cloudinary.
+    if (apartment.images?.length) {
       for (const image of apartment.images) {
-        if (image.publicId) {
-          try {
-            await cloudinary.uploader.destroy(
-              image.publicId
-            );
-          } catch (cloudinaryError) {
-            console.error(
-              `Failed to delete image ${image.publicId} from Cloudinary:`,
-              cloudinaryError
-            );
-          }
+        if (!image.publicId) continue;
+
+        try {
+          await cloudinary.uploader.destroy(image.publicId);
+        } catch (error) {
+          console.error(
+            `Failed to delete Cloudinary image ${image.publicId}:`,
+            error
+          );
         }
       }
     }
 
-    // Permanently delete apartment from MongoDB
-    await Apartment.findByIdAndDelete(req.params.id);
+    await Apartment.findByIdAndDelete(id);
 
     return res.status(200).json({
       success: true,
-      message:
-        "Apartment and all its images deleted successfully",
+      message: "Apartment and its images deleted successfully.",
     });
-
   } catch (error) {
-    console.error(
-      "Delete Apartment Error:",
-      error
-    );
+    console.error("Delete Apartment Error:", error);
 
     return res.status(500).json({
       success: false,
-      message: error.message,
+      message: "Failed to process apartment deletion.",
     });
   }
 };
+
+
 
 // export const getAvailableApartments = async (req, res) => {
 //   try {
@@ -507,6 +898,166 @@ export const getAllApartmentsWithStatus = async (req, res) => {
     return res.status(500).json({
       success: false,
       message: error.message
+    });
+  }
+};
+
+
+export const getPendingApartmentDeletions = async (req, res) => {
+  try {
+    if (req.user.role !== "OWNER") {
+      return res.status(403).json({
+        success: false,
+        message: "Only the owner can view pending deletion requests.",
+      });
+    }
+
+    const apartments = await Apartment.find({
+      "pendingDeletion.requestedAt": { $exists: true },
+    })
+      .populate("pendingDeletion.requestedBy", "fullName email role staffCode")
+      .sort({ "pendingDeletion.requestedAt": -1 });
+
+    return res.status(200).json({
+      success: true,
+      count: apartments.length,
+      apartments,
+    });
+  } catch (error) {
+    console.error("Get pending apartment deletions error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch pending deletion requests.",
+    });
+  }
+};
+
+export const approveApartmentDeletion = async (req, res) => {
+  try {
+    if (req.user.role !== "OWNER") {
+      return res.status(403).json({
+        success: false,
+        message: "Only the owner can approve apartment deletions.",
+      });
+    }
+
+    const apartment = await Apartment.findById(req.params.id);
+
+    if (!apartment) {
+      return res.status(404).json({
+        success: false,
+        message: "Apartment not found.",
+      });
+    }
+
+    if (!apartment.pendingDeletion?.requestedAt) {
+      return res.status(400).json({
+        success: false,
+        message: "No pending deletion request exists.",
+      });
+    }
+
+    const bookings = await Booking.find({
+      apartment: apartment._id,
+      })
+    .select("_id bookingReference bookingStatus paymentStatus checkIn checkOut")
+    .lean();
+
+
+    const terminalStatuses = [
+      "CANCELLED",
+      "CHECKED_OUT",
+      "EXPIRED",
+    ];
+
+    const activeBookings = bookings.filter(
+      (booking) =>
+        !terminalStatuses.includes(
+          String(booking.bookingStatus || "").toUpperCase()
+        )
+    );
+
+
+
+    if (activeBookings > 0) {
+      return res.status(409).json({
+        success: false,
+        message:
+          "This apartment has active bookings. Resolve them before deleting it.",
+      });
+    }
+
+    // Delete Cloudinary images only after approval.
+    if (apartment.images?.length) {
+      for (const image of apartment.images) {
+        if (!image.publicId) continue;
+
+        try {
+          await cloudinary.uploader.destroy(image.publicId);
+        } catch (error) {
+          console.error(
+            `Failed to delete Cloudinary image ${image.publicId}:`,
+            error
+          );
+        }
+      }
+    }
+
+    await Apartment.findByIdAndDelete(apartment._id);
+
+    return res.status(200).json({
+      success: true,
+      message: "Apartment deletion approved and completed.",
+    });
+  } catch (error) {
+    console.error("Approve apartment deletion error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to approve apartment deletion.",
+    });
+  }
+};
+
+export const rejectApartmentDeletion = async (req, res) => {
+  try {
+    if (req.user.role !== "OWNER") {
+      return res.status(403).json({
+        success: false,
+        message: "Only the owner can reject apartment deletions.",
+      });
+    }
+
+    const apartment = await Apartment.findById(req.params.id);
+
+    if (!apartment) {
+      return res.status(404).json({
+        success: false,
+        message: "Apartment not found.",
+      });
+    }
+
+    if (!apartment.pendingDeletion?.requestedAt) {
+      return res.status(400).json({
+        success: false,
+        message: "No pending deletion request exists.",
+      });
+    }
+
+    apartment.pendingDeletion = undefined;
+    await apartment.save();
+
+    return res.status(200).json({
+      success: true,
+      message: "Apartment deletion request rejected.",
+    });
+  } catch (error) {
+    console.error("Reject apartment deletion error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to reject apartment deletion.",
     });
   }
 };
