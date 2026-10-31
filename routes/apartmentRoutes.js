@@ -140,7 +140,7 @@ apartmentRouter.post(
 apartmentRouter.delete(
   "/:id/images/:publicId",
   protect,
-  authorizeRoles("OWNER"),
+  authorizeRoles("OWNER", "MANAGER"),
   deleteApartmentImage
 );
 
