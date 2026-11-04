@@ -1220,3 +1220,19 @@ export const getApprovedApartments = async (req, res) => {
     });
   }
 };
+
+export const getAllPublicApartments = async (req, res) => {
+  try {
+    const apartments = await Apartment.find();
+
+    return res.status(200).json({
+      success: true,
+      apartments
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
+};

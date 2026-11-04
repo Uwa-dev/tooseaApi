@@ -19,6 +19,7 @@ import {
   getPendingApartmentDeletions,
   approveApartmentDeletion,
   rejectApartmentDeletion,
+  getAllPublicApartments,
 } from "../controllers/apartmentController.js";
 
 import upload from "../middleware/upload.js";
@@ -32,6 +33,8 @@ const apartmentRouter = express.Router();
 
 // Get all active apartments (public)
 apartmentRouter.get("/", getAllApartments);
+
+apartmentRouter.get("/public", getAllPublicApartments);
 
 // Owner and Manager can create apartments
 apartmentRouter.post(
